@@ -19,4 +19,4 @@ It allows you to download, install, and update Firefox versions independently wi
 
 1. **Windows OS** (Tested on Windows 10/11).
 2. **Python 3.x** installed.
-3. **7-Zip** installed (The script needs `7z.exe` to extract the installers) or **7-Zip console executable**
+3. **7-Zip** installed (The script needs `7z.exe` to extract the installers) or **7-Zip console executable**.
