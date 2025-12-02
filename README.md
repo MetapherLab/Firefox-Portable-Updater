@@ -20,10 +20,3 @@ It allows you to download, install, and update Firefox versions independently wi
 1. **Windows OS** (Tested on Windows 10/11).
 2. **Python 3.x** installed.
 3. **7-Zip** installed (The script needs `7z.exe` to extract the installers).
-
-## 🚀 Installation & Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/firefox-portable-manager.git
-   cd firefox-portable-manager
