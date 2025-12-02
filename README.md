@@ -21,8 +21,6 @@ It allows you to download, install, and update Firefox versions independently wi
 2. **Python 3.x** installed.
 3. **7-Zip** installed (The script needs `7z.exe` to extract the installers) or **7-Zip console executable**.
 
-Here is the updated Markdown section. You can simply append this to the end of your `README.md` or place it before the "Changelog" section.
-
 
 ## 📦 Building a Standalone EXE
 
