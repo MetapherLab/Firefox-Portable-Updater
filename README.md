@@ -22,6 +22,7 @@ It allows you to download, install, and update Firefox versions independently wi
 3. **7-Zip** installed (The script needs `7z.exe` to extract the installers) or **7-Zip console executable**.
 
 
+
 ## 📦 Building a Standalone EXE
 
 If you want to run this tool on a computer without Python installed, you can convert the script into a single executable file using **auto-py-to-exe**.
