@@ -23,7 +23,7 @@ It allows you to download, install, and update Firefox versions independently wi
 
 Here is the updated Markdown section. You can simply append this to the end of your `README.md` or place it before the "Changelog" section.
 
-```markdown
+
 ## 📦 Building a Standalone EXE
 
 If you want to run this tool on a computer without Python installed, you can convert the script into a single executable file using **auto-py-to-exe**.
@@ -53,4 +53,3 @@ If you want to run this tool on a computer without Python installed, you can con
 
 5. **Finish:**
    Once completed, click **Open Output Folder**. You will find your standalone `.exe` there. You can now move this file to any location (e.g., a USB drive) and run it.
-```
