@@ -1,16 +1,16 @@
 """
 --------------------------------------------------------------------------------
-SCRIPT INFO
+SKRIPT-INFO
 --------------------------------------------------------------------------------
 Name:           Firefox Portable Manager
-Description:    Management of portable Firefox versions.
+Beschreibung:   Verwaltung von portablen Firefox Versionen.
                 Fixes V3.4:
-                - FIX: "Gray" status issue resolved (Fallback to application.ini)
-                - FIX: Enforced absolute paths for os.path.exists checks
-                - FIX: UI turns green even if version is unreadable but file exists
-Author:         AI Assistant
-Date:           2024-12-01
-Version:        3.4 (Stable UI Fix / English Release)
+                - FIX: "Grau"-Problem behoben (Fallback auf application.ini)
+                - FIX: Erzwingung absoluter Pfade für os.path.exists
+                - FIX: UI wird auch grün, wenn Version nicht lesbar, aber Datei existiert
+Autor:          KI-Assistenz
+Datum:          01.12.2024
+Version:        3.4 (Stable UI Fix)
 --------------------------------------------------------------------------------
 """
 
@@ -30,28 +30,27 @@ import win32com.client
 import pythoncom
 from win32api import GetFileVersionInfo, LOWORD, HIWORD
 
-# ----------------- STANDARD CONFIGURATION -----------------
-# Changed lang=de to lang=en-US for international use
+# ----------------- STANDARD KONFIGURATION -----------------
 DEFAULT_URLS = {
-    "Stable": "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US",
-    "Beta":   "https://download.mozilla.org/?product=firefox-beta-latest-ssl&os=win64&lang=en-US",
-    "Nightly":"https://download.mozilla.org/?product=firefox-nightly-latest-ssl&os=win64&lang=en-US"
+    "Stable": "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=de",
+    "Beta":   "https://download.mozilla.org/?product=firefox-beta-latest-ssl&os=win64&lang=de",
+    "Nightly":"https://download.mozilla.org/?product=firefox-nightly-latest-ssl&os=win64&lang=de"
 }
 
 DEFAULT_HELP_TEXT = """
-Firefox Portable Manager Help
+Firefox Portable Manager Hilfe
 
-1. COLORS & STATUS
-- Gray:  File 'firefox.exe' was not found in the expected folder.
-- Green: Installed.
-- Red:   A newer version is available online.
+1. FARBEN & STATUS
+- Grau:  Datei 'firefox.exe' wurde im erwarteten Ordner nicht gefunden.
+- Grün:  Installiert.
+- Rot:   Online ist eine neuere Version verfügbar.
 
-2. TROUBLESHOOTING
-- If 'Launch' works but the version stays gray: This was fixed in v3.4 (application.ini check).
-- Check the 'Log / Console' for exact path details.
+2. FEHLERBEHEBUNG
+- Falls 'Starten' geht, aber die Version grau bleibt: Das wurde in V3.4 behoben (application.ini Check).
+- Prüfen Sie das Log für genaue Pfadangaben.
 """
 
-# ----------------- HELPER FUNCTIONS -----------------
+# ----------------- HILFSFUNKTIONEN -----------------
 
 def get_base_dir():
     if getattr(sys, 'frozen', False):
@@ -65,7 +64,7 @@ def get_log_path():
     return os.path.join(get_base_dir(), "FirefoxManager_Log.txt")
 
 def parse_version_to_tuple(version_str):
-    if not version_str or "Unknown" in version_str:
+    if not version_str or "Unbekannt" in version_str:
         return (0, 0, 0)
     
     clean_str = re.sub(r'[^0-9\.]', '', version_str)
@@ -75,11 +74,12 @@ def parse_version_to_tuple(version_str):
     except ValueError:
         return (0, 0, 0)
 
-# ----------------- LOGGING CLASS -----------------
+# ----------------- LOGGING KLASSE -----------------
 class Logger:
     def __init__(self, log_file, ui_callback=None):
         self.log_file = log_file
         self.ui_callback = ui_callback
+        self.log_buffer = []  # NEU: Buffer für frühe Logs
         logging.basicConfig(filename=self.log_file, level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s', force=True)
 
@@ -90,11 +90,16 @@ class Logger:
         
         print(f"[{level.upper()}] {message}")
         
+        timestamp = time.strftime("%H:%M:%S")
+        formatted_msg = f"[{timestamp}] {message}\n"
+        
+        # NEU: Speichere im Buffer
+        self.log_buffer.append(formatted_msg)
+        
         if self.ui_callback:
-            timestamp = time.strftime("%H:%M:%S")
-            self.ui_callback(f"[{timestamp}] {message}\n")
+            self.ui_callback(formatted_msg)
 
-# ----------------- GUI CLASS -----------------
+# ----------------- GUI KLASSE -----------------
 class FirefoxManagerApp:
     def __init__(self, root):
         self.root = root
@@ -115,9 +120,10 @@ class FirefoxManagerApp:
         self.style.configure("TButton", padding=5)
         self.style.configure("Header.TLabel", font=('Segoe UI', 10, 'bold'))
         
-        self.style.configure("Installed.TLabel", font=('Segoe UI', 9), foreground="#008000") # Green
-        self.style.configure("Update.TLabel", font=('Segoe UI', 9, 'bold'), foreground="#CC0000") # Red
-        self.style.configure("Missing.TLabel", font=('Segoe UI', 9), foreground="#808080") # Gray
+        self.style.configure("Installed.TLabel", font=('Segoe UI', 9), foreground="#008000") # Grün
+        self.style.configure("Update.TLabel", font=('Segoe UI', 9, 'bold'), foreground="#CC0000") # Rot
+        self.style.configure("Missing.TLabel", font=('Segoe UI', 9), foreground="#808080") # Grau
+        self.style.configure("Checking.TLabel", font=('Segoe UI', 9), foreground="#0066CC") # Blau - NEU HINZUFÜGEN
 
         self.create_menu()
 
@@ -127,18 +133,18 @@ class FirefoxManagerApp:
         # Info
         info_frame = ttk.LabelFrame(main_frame, text="Info & Status", padding="5")
         info_frame.pack(fill=tk.X, pady=(0, 10))
-        self.status_var = tk.StringVar(value="Ready.")
+        self.status_var = tk.StringVar(value="Bereit.")
         self.status_label = ttk.Label(info_frame, textvariable=self.status_var, foreground="blue")
         self.status_label.pack(fill=tk.X)
         self.progress = ttk.Progressbar(info_frame, mode='indeterminate')
         
-        # Versions
-        versions_frame = ttk.LabelFrame(main_frame, text="Firefox Versions", padding="5")
+        # Versionen
+        versions_frame = ttk.LabelFrame(main_frame, text="Firefox Versionen", padding="5")
         versions_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         ttk.Label(versions_frame, text="Version", style="Header.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(versions_frame, text="Status (Local)", style="Header.TLabel").grid(row=0, column=1, sticky="w")
-        ttk.Label(versions_frame, text="Actions", style="Header.TLabel").grid(row=0, column=2, sticky="w")
+        ttk.Label(versions_frame, text="Status (Lokal)", style="Header.TLabel").grid(row=0, column=1, sticky="w")
+        ttk.Label(versions_frame, text="Aktionen", style="Header.TLabel").grid(row=0, column=2, sticky="w")
 
         self.version_widgets = {}
         row = 1
@@ -150,32 +156,32 @@ class FirefoxManagerApp:
         footer_frame = ttk.Frame(main_frame)
         footer_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
-        ttk.Button(footer_frame, text="Settings", command=self.open_settings).pack(side=tk.LEFT, padx=5)
-        ttk.Button(footer_frame, text="Help", command=self.show_help).pack(side=tk.LEFT, padx=5)
-        ttk.Button(footer_frame, text="Log / Console", command=self.show_console).pack(side=tk.LEFT, padx=5)
-        ttk.Button(footer_frame, text="Exit", command=self.on_close).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(footer_frame, text="Einstellungen", command=self.open_settings).pack(side=tk.LEFT, padx=5)
+        ttk.Button(footer_frame, text="Hilfe", command=self.show_help).pack(side=tk.LEFT, padx=5)
+        ttk.Button(footer_frame, text="Log / Konsole", command=self.show_console).pack(side=tk.LEFT, padx=5)
+        ttk.Button(footer_frame, text="Beenden", command=self.on_close).pack(side=tk.RIGHT, padx=5)
 
         self.check_cli_args()
         
-        self.logger.log(f"Base Directory: {self.config.get('GENERAL', 'BaseDir')}")
+        self.logger.log(f"Basis-Verzeichnis: {self.config.get('GENERAL', 'BaseDir')}")
         self.refresh_versions_ui()
         self.root.after(2000, self.startup_update_check)
 
     def create_menu(self):
         menubar = tk.Menu(self.root)
         file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Settings", command=self.open_settings)
+        file_menu.add_command(label="Einstellungen", command=self.open_settings)
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.on_close)
-        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Beenden", command=self.on_close)
+        menubar.add_cascade(label="Datei", menu=file_menu)
 
         view_menu = tk.Menu(menubar, tearoff=0)
-        view_menu.add_command(label="Show Console", command=self.show_console)
-        menubar.add_cascade(label="View", menu=view_menu)
+        view_menu.add_command(label="Konsole anzeigen", command=self.show_console)
+        menubar.add_cascade(label="Ansicht", menu=view_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="Show Help", command=self.show_help)
-        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="Hilfe anzeigen", command=self.show_help)
+        menubar.add_cascade(label="Hilfe", menu=help_menu)
         self.root.config(menu=menubar)
 
     def load_config(self):
@@ -209,16 +215,16 @@ class FirefoxManagerApp:
         lbl_name = ttk.Label(parent, text=name, font=('Segoe UI', 10))
         lbl_name.grid(row=row, column=0, sticky="w", pady=10, padx=5)
 
-        # Default text
-        lbl_ver = ttk.Label(parent, text="Checking...", foreground="gray")
+        # Standard Text ist Prüfe...
+        lbl_ver = ttk.Label(parent, text="Prüfe...", foreground="gray")
         lbl_ver.grid(row=row, column=1, sticky="w", pady=10, padx=5)
 
         btn_frame = ttk.Frame(parent)
         btn_frame.grid(row=row, column=2, sticky="w", pady=10, padx=5)
 
-        btn_start = ttk.Button(btn_frame, text="Launch", command=lambda n=name: self.launch_firefox(n))
+        btn_start = ttk.Button(btn_frame, text="Starten", command=lambda n=name: self.launch_firefox(n))
         btn_update = ttk.Button(btn_frame, text="Update / Install", command=lambda n=name: self.start_check_process(n))
-        btn_del = ttk.Button(btn_frame, text="Delete", command=lambda n=name: self.delete_version(n))
+        btn_del = ttk.Button(btn_frame, text="Löschen", command=lambda n=name: self.delete_version(n))
         
         btn_start.pack(side=tk.LEFT, padx=2)
         btn_update.pack(side=tk.LEFT, padx=2)
@@ -231,19 +237,27 @@ class FirefoxManagerApp:
             'btn_delete': btn_del
         }
 
-    # ----------------- CONSOLE -----------------
+    # ----------------- KONSOLE -----------------
 
     def show_console(self):
         if self.console_window is None or not tk.Toplevel.winfo_exists(self.console_window):
             self.console_window = tk.Toplevel(self.root)
-            self.console_window.title("Log / Console")
+            self.console_window.title("Log / Konsole")
             self.console_window.geometry("600x400")
             
             self.console_text_widget = scrolledtext.ScrolledText(self.console_window, state='disabled', font=("Consolas", 9))
             self.console_text_widget.pack(fill=tk.BOTH, expand=True)
             
-            btn_clear = ttk.Button(self.console_window, text="Clear", command=self.clear_console)
+            btn_clear = ttk.Button(self.console_window, text="Leeren", command=self.clear_console)
             btn_clear.pack(side=tk.BOTTOM, fill=tk.X)
+            
+            # NEU: Zeige alle gepufferten Logs an
+            if self.logger.log_buffer:
+                self.console_text_widget.config(state='normal')
+                for msg in self.logger.log_buffer:
+                    self.console_text_widget.insert(tk.END, msg)
+                self.console_text_widget.see(tk.END)
+                self.console_text_widget.config(state='disabled')
         else:
             self.console_window.lift()
 
@@ -263,11 +277,11 @@ class FirefoxManagerApp:
             self.console_text_widget.see(tk.END)
             self.console_text_widget.config(state='disabled')
 
-    # ----------------- STATUS & PATHS -----------------
+    # ----------------- STATUS & PFADE -----------------
 
     def get_version_dir(self, name):
         base = self.config.get('GENERAL', 'BaseDir', fallback=self.base_dir)
-        # Fix: Enforce absolute paths
+        # Fix: Absolute Pfade sicherstellen
         return os.path.abspath(os.path.join(base, name))
 
     def get_exe_path(self, name):
@@ -282,51 +296,50 @@ class FirefoxManagerApp:
 
     def refresh_versions_ui(self):
         """ 
-        Updates the UI based on local status.
-        Runs immediately at startup.
+        Aktualisiert die UI basierend auf lokalem Status.
+        Dies läuft beim Start sofort. 
         """
         for name in DEFAULT_URLS.keys():
             exe = self.get_exe_path(name)
             widgets = self.version_widgets[name]
             
-            # IMPORTANT: os.path.exists must succeed.
             if os.path.exists(exe):
                 ver = self.get_file_version(exe)
-                if ver == "Unknown":
-                    # Fallback Text, but GREEN because file exists
-                    ver_text = "Installed (Ver.?)"
+                if ver == "Unbekannt":
+                    ver_text = "Installiert (Ver.?)"
                 else:
-                    ver_text = ver
+                    ver_text = f"{ver} (Prüfe...)"
                 
-                widgets['lbl_ver'].config(text=ver_text, style="Installed.TLabel")
+                # Setze auf "Checking" Status (blau), bis Auto-Check fertig ist
+                widgets['lbl_ver'].config(text=ver_text, style="Checking.TLabel")
                 widgets['btn_start'].state(['!disabled'])
                 widgets['btn_delete'].state(['!disabled'])
             else:
-                widgets['lbl_ver'].config(text="Not installed", style="Missing.TLabel")
+                widgets['lbl_ver'].config(text="Nicht installiert", style="Missing.TLabel")
                 widgets['btn_start'].state(['disabled'])
                 widgets['btn_delete'].state(['disabled'])
 
     def get_file_version(self, path):
         """ 
-        Attempts to read version.
-        1. Method: application.ini (reliable for Firefox)
-        2. Method: Win32 API (Fallback)
+        Versucht Version zu lesen.
+        1. Methode: application.ini (zuverlässig bei Firefox)
+        2. Methode: Win32 API (Fallback)
         """
-        # Method 1: read application.ini (sits next to firefox.exe or in parent)
+        # Methode 1: application.ini lesen (liegt neben firefox.exe oder im Parent)
         try:
             exe_dir = os.path.dirname(path)
             ini_path = os.path.join(exe_dir, "application.ini")
             if os.path.exists(ini_path):
                 with open(ini_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                    # Search for [App] ... Version=X.X.X
+                    # Suche nach [App] ... Version=X.X.X
                     match = re.search(r'Version=([0-9\.]+[a-z0-9]*)', content)
                     if match:
                         return match.group(1)
         except Exception:
-            pass # Proceed to Method 2
+            pass # Weiter zu Methode 2
 
-        # Method 2: Win32 API
+        # Methode 2: Win32 API
         try:
             info = GetFileVersionInfo(path, "\\")
             ms = info['FileVersionMS']
@@ -335,7 +348,7 @@ class FirefoxManagerApp:
         except Exception:
             pass
             
-        return "Unknown"
+        return "Unbekannt"
 
     # ----------------- AUTO-CHECK -----------------
 
@@ -345,51 +358,54 @@ class FirefoxManagerApp:
         t.start()
 
     def run_startup_check(self):
-        self.logger.log("Starting auto-update check...", "info")
+        self.logger.log("Starte Auto-Update-Prüfung...", "info")
         updates_found = 0
         
         for name, url in DEFAULT_URLS.items():
             exe_path = self.get_exe_path(name)
             
             if not os.path.exists(exe_path):
-                # If file really doesn't exist, it stays Gray
+                self.logger.log(f"[CHECK] {name}: Nicht installiert", "info")  # NEU
                 continue
 
             local_str = self.get_file_version(exe_path)
+            self.logger.log(f"[CHECK] {name}: Lokale Version = {local_str}", "info")  # NEU
             
-            # FIX: If version is unknown, but file exists -> mark GREEN anyway
-            if local_str == "Unknown":
-                 self.logger.log(f"[WARN] Version of {name} unreadable, but installed.", "warning")
-                 self.root.after(0, lambda n=name: self.mark_uptodate(n, "Installed (Ver.?)"))
+            # FIX: Wenn Version unbekannt, aber Datei da -> trotzdem GRÜN markieren
+            if local_str == "Unbekannt":
+                 self.logger.log(f"[WARN] Version von {name} nicht lesbar, aber installiert.", "warning")
+                 self.root.after(0, lambda n=name: self.mark_uptodate(n, "Installiert (Ver.?)"))
                  continue
 
             remote_str = self.get_remote_version_info(url)
+            self.logger.log(f"[CHECK] {name}: Remote Version = {remote_str}", "info")  # NEU
+            
             if not remote_str:
-                # No internet? Display local status as Green anyway
+                self.logger.log(f"[CHECK] {name}: Kein Internet, markiere als aktuell", "info")  # NEU
                 self.root.after(0, lambda n=name, l=local_str: self.mark_uptodate(n, l))
                 continue
 
             if self.check_is_newer(local_str, remote_str):
                 updates_found += 1
+                self.logger.log(f"[CHECK] {name}: Update verfügbar!", "info")  # NEU
                 self.root.after(0, lambda n=name, l=local_str: self.mark_update_available(n, l))
             else:
+                self.logger.log(f"[CHECK] {name}: Ist aktuell", "info")  # NEU
                 self.root.after(0, lambda n=name, l=local_str: self.mark_uptodate(n, l))
-
-        if updates_found > 0:
-            self.root.after(0, lambda: self.status_var.set(f"{updates_found} update(s) found."))
-        else:
-            self.root.after(0, lambda: self.status_var.set("All installations up to date."))
 
     def mark_update_available(self, name, local_ver):
         lbl = self.version_widgets[name]['lbl_ver']
         lbl.config(text=f"{local_ver} (Update!)", style="Update.TLabel")
 
-    def mark_uptodate(self, name, local_ver):
+    def mark_update_available(self, name, local_ver):
         lbl = self.version_widgets[name]['lbl_ver']
-        lbl.config(text=f"{local_ver}", style="Installed.TLabel")
+        # Entferne "(Prüfe...)" falls vorhanden
+        clean_ver = local_ver.replace(" (Prüfe...)", "")
+        lbl.config(text=f"{clean_ver} (Update!)", style="Update.TLabel")
+        self.logger.log(f"[UI] {name} markiert als Update verfügbar: {clean_ver}", "info")
 
     def check_is_newer(self, local_ver, remote_ver):
-        if "Unknown" in local_ver or not remote_ver: return False
+        if "Unbekannt" in local_ver or not remote_ver: return False
         
         loc_tup = parse_version_to_tuple(local_ver)
         rem_tup = parse_version_to_tuple(remote_ver)
@@ -398,8 +414,41 @@ class FirefoxManagerApp:
         loc_trimmed = loc_tup[:check_len]
         
         return rem_tup > loc_trimmed
+    
+    
+    
+        # NEU: Diese beiden Methoden hier einfügen
+    def mark_update_available(self, name, local_ver):
+        lbl = self.version_widgets[name]['lbl_ver']
+        clean_ver = local_ver.replace(" (Prüfe...)", "")
+        
+        # Direktes Setzen der Farbe statt nur Style
+        lbl.config(
+            text=f"{clean_ver} (Update!)", 
+            style="Update.TLabel",
+            foreground="#CC0000"  # Rot erzwingen
+        )
+        lbl.update_idletasks()  # UI-Refresh erzwingen
+        
+        self.logger.log(f"[UI] {name} markiert als Update verfügbar: {clean_ver}", "info")
 
-    # ----------------- UPDATE PROCESS -----------------
+    def mark_uptodate(self, name, local_ver):
+        lbl = self.version_widgets[name]['lbl_ver']
+        # Entferne "(Prüfe...)" falls vorhanden
+        clean_ver = local_ver.replace(" (Prüfe...)", "")
+        
+        # Direktes Setzen der Farbe statt nur Style
+        lbl.config(
+            text=f"{clean_ver}", 
+            style="Installed.TLabel",
+            foreground="#008000"  # Grün erzwingen
+        )
+        lbl.update_idletasks()  # UI-Refresh erzwingen
+        
+        self.logger.log(f"[UI] {name} markiert als aktuell: {clean_ver}", "info")
+
+
+    # ----------------- UPDATE PROZESS -----------------
 
     def get_remote_version_info(self, url):
         try:
@@ -425,31 +474,31 @@ class FirefoxManagerApp:
         if is_installed:
             local_ver = self.get_file_version(exe_path)
             
-        self.update_status(f"Checking online version for {name}...")
+        self.update_status(f"Prüfe Online-Version für {name}...")
         remote_ver = self.get_remote_version_info(url)
         self.set_busy(False)
 
         should_install = False
         
         if not is_installed:
-            msg = f"{name} is not installed.\nPath: {exe_path}\n"
-            if remote_ver: msg += f"Available: {remote_ver}\n"
-            msg += "\nInstall now?"
+            msg = f"{name} ist nicht installiert.\nPfad: {exe_path}\n"
+            if remote_ver: msg += f"Verfügbar: {remote_ver}\n"
+            msg += "\nJetzt installieren?"
             if messagebox.askyesno("Installation", msg):
                 should_install = True
         else:
-            # Update Logic
-            disp_local = local_ver if local_ver else "Unknown"
+            # Update Logik
+            disp_local = local_ver if local_ver else "Unbekannt"
             
             if remote_ver:
                 if self.check_is_newer(disp_local, remote_ver):
-                    msg = f"Update available!\nLocal: {disp_local}\nOnline: {remote_ver}\n\nUpdate?"
+                    msg = f"Update verfügbar!\nLokal: {disp_local}\nOnline: {remote_ver}\n\nAktualisieren?"
                     if messagebox.askyesno("Update", msg): should_install = True
                 else:
-                    msg = f"Version is up to date.\nLocal: {disp_local}\nOnline: {remote_ver}\n\nReinstall / Repair?"
-                    if messagebox.askyesno("Up to date", msg): should_install = True
+                    msg = f"Version ist aktuell.\nLokal: {disp_local}\nOnline: {remote_ver}\n\nNeu installieren / Reparieren?"
+                    if messagebox.askyesno("Aktuell", msg): should_install = True
             else:
-                if messagebox.askyesno("Connection Issue", f"No online info.\nLocal: {disp_local}\nDownload anyway?"):
+                if messagebox.askyesno("Verbindungsproblem", f"Keine Online-Info.\nLokal: {disp_local}\nTrotzdem laden?"):
                     should_install = True
 
         if should_install:
@@ -458,7 +507,7 @@ class FirefoxManagerApp:
             t = threading.Thread(target=self.run_download_install_process, args=(name, url))
             t.start()
         else:
-            self.update_status("Cancelled.")
+            self.update_status("Abgebrochen.")
 
     def run_download_install_process(self, name, url):
         try:
@@ -466,9 +515,9 @@ class FirefoxManagerApp:
             
             seven_zip = self.config.get('GENERAL', '7ZipPath')
             if not seven_zip or (not os.path.exists(seven_zip) and not shutil.which("7z")):
-                raise Exception("7-Zip path invalid!")
+                raise Exception("7-Zip Pfad ungültig!")
 
-            self.update_status(f"Downloading {name}...")
+            self.update_status(f"Lade {name}...")
             temp_dir = os.path.join(self.base_dir, "temp_install")
             os.makedirs(temp_dir, exist_ok=True)
             installer_path = os.path.join(temp_dir, f"firefox_{name}.exe")
@@ -478,9 +527,9 @@ class FirefoxManagerApp:
             with open(installer_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
             
-            self.logger.log("Download complete.")
+            self.logger.log("Download fertig.")
 
-            self.update_status(f"Extracting {name}...")
+            self.update_status(f"Entpacke {name}...")
             version_dir = self.get_version_dir(name)
             core_dir = os.path.join(version_dir, "core")
             
@@ -488,7 +537,7 @@ class FirefoxManagerApp:
                 try:
                     shutil.move(core_dir, core_dir + "_bak")
                 except Exception as e:
-                    self.logger.log(f"Backup failed (Firefox running?): {e}", "error")
+                    self.logger.log(f"Backup fehlgeschlagen (Firefox offen?): {e}", "error")
                     raise
             
             os.makedirs(core_dir, exist_ok=True)
@@ -502,7 +551,7 @@ class FirefoxManagerApp:
             for root, dirs, files in os.walk(extract_temp):
                 if "firefox.exe" in files:
                     source_dir = root
-                    self.logger.log(f"Firefox found in: {source_dir}")
+                    self.logger.log(f"Firefox gefunden in: {source_dir}")
                     
                     for item in os.listdir(source_dir):
                         s = os.path.join(source_dir, item)
@@ -515,7 +564,7 @@ class FirefoxManagerApp:
                     break
             
             if not found_exe:
-                raise Exception("firefox.exe not found inside the installer!")
+                raise Exception("firefox.exe konnte im Installer nicht gefunden werden!")
 
             shutil.rmtree(temp_dir, ignore_errors=True)
             if os.path.exists(core_dir + "_bak"): shutil.rmtree(core_dir + "_bak", ignore_errors=True)
@@ -524,12 +573,12 @@ class FirefoxManagerApp:
             os.makedirs(profile_dir, exist_ok=True)
             self.create_shortcut(name)
 
-            self.logger.log(f"--- {name} successfully installed ---")
-            self.root.after(0, lambda: messagebox.showinfo("Success", f"{name} installed."))
+            self.logger.log(f"--- {name} erfolgreich installiert ---")
+            self.root.after(0, lambda: messagebox.showinfo("Erfolg", f"{name} installiert."))
             
         except Exception as e:
-            self.logger.log(f"ERROR: {e}", "error")
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            self.logger.log(f"FEHLER: {e}", "error")
+            self.root.after(0, lambda: messagebox.showerror("Fehler", str(e)))
         
         finally:
             self.root.after(0, self.set_busy, False)
@@ -541,11 +590,11 @@ class FirefoxManagerApp:
         exe_path = self.get_exe_path(name)
         if not os.path.exists(exe_path): return
 
-        msg = f"Really delete Firefox {name}?"
-        if not messagebox.askyesno("Delete", msg, icon='warning'): return
+        msg = f"Firefox {name} wirklich löschen?"
+        if not messagebox.askyesno("Löschen", msg, icon='warning'): return
 
         try:
-            self.logger.log(f"Deleting {name}...")
+            self.logger.log(f"Lösche {name}...")
             ver_dir = self.get_version_dir(name)
             if os.path.exists(ver_dir): shutil.rmtree(ver_dir)
             
@@ -553,9 +602,9 @@ class FirefoxManagerApp:
             if os.path.exists(lnk): os.remove(lnk)
 
             self.refresh_versions_ui()
-            messagebox.showinfo("Info", f"{name} deleted.")
+            messagebox.showinfo("Info", f"{name} gelöscht.")
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Fehler", str(e))
 
     def create_shortcut(self, name):
         try:
@@ -574,7 +623,7 @@ class FirefoxManagerApp:
             s.Description = f"Firefox {name} Portable"
             s.save()
         except Exception as e:
-            self.logger.log(f"Shortcut error: {e}", "warning")
+            self.logger.log(f"Shortcut Fehler: {e}", "warning")
 
     def launch_firefox(self, name):
         exe = self.get_exe_path(name)
@@ -586,9 +635,9 @@ class FirefoxManagerApp:
         
         try:
             subprocess.Popen(cmd)
-            self.status_var.set(f"{name} launched.")
+            self.status_var.set(f"{name} gestartet.")
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Fehler", str(e))
 
     # ----------------- UI HELPER -----------------
 
@@ -596,11 +645,11 @@ class FirefoxManagerApp:
         if busy:
             self.progress.pack(fill=tk.X, padx=5, pady=2)
             self.progress.start(10)
-            self.status_var.set("Working...")
+            self.status_var.set("Arbeite...")
         else:
             self.progress.stop()
             self.progress.pack_forget()
-            self.status_var.set("Ready.")
+            self.status_var.set("Bereit.")
 
     def update_status(self, text):
         self.root.after(0, lambda: self.status_var.set(text))
@@ -617,12 +666,12 @@ class FirefoxManagerApp:
         self.root.destroy()
         sys.exit(0)
 
-# ----------------- DIALOGS -----------------
+# ----------------- DIALOGE -----------------
 
 class SettingsDialog(tk.Toplevel):
     def __init__(self, parent, config, save_cb):
         super().__init__(parent)
-        self.title("Settings")
+        self.title("Einstellungen")
         self.config = config
         self.save_cb = save_cb
         self.geometry("500x250")
@@ -633,22 +682,22 @@ class SettingsDialog(tk.Toplevel):
         y = parent.winfo_y() + 50
         self.geometry(f"+{x}+{y}")
 
-        ttk.Label(self, text="Base Directory:").pack(anchor="w", padx=10, pady=(10,0))
+        ttk.Label(self, text="Basis Verzeichnis:").pack(anchor="w", padx=10, pady=(10,0))
         self.entry_base = ttk.Entry(self)
         self.entry_base.pack(fill=tk.X, padx=10, pady=2)
         self.entry_base.insert(0, config.get('GENERAL', 'BaseDir'))
-        ttk.Button(self, text="Browse", command=self.browse_base).pack(anchor="e", padx=10)
+        ttk.Button(self, text="Wählen", command=self.browse_base).pack(anchor="e", padx=10)
 
-        ttk.Label(self, text="7-Zip Path (7z.exe):").pack(anchor="w", padx=10, pady=(10,0))
+        ttk.Label(self, text="7-Zip Pfad (7z.exe):").pack(anchor="w", padx=10, pady=(10,0))
         self.entry_7z = ttk.Entry(self)
         self.entry_7z.pack(fill=tk.X, padx=10, pady=2)
         self.entry_7z.insert(0, config.get('GENERAL', '7ZipPath'))
-        ttk.Button(self, text="Browse", command=self.browse_7z).pack(anchor="e", padx=10)
+        ttk.Button(self, text="Wählen", command=self.browse_7z).pack(anchor="e", padx=10)
 
         f = ttk.Frame(self)
         f.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
-        ttk.Button(f, text="Save", command=self.save).pack(side=tk.RIGHT, padx=10)
-        ttk.Button(f, text="Cancel", command=self.destroy).pack(side=tk.RIGHT)
+        ttk.Button(f, text="Speichern", command=self.save).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(f, text="Abbrechen", command=self.destroy).pack(side=tk.RIGHT)
 
     def browse_base(self):
         d = filedialog.askdirectory(initialdir=self.entry_base.get())
@@ -667,7 +716,7 @@ class SettingsDialog(tk.Toplevel):
 class HelpDialog(tk.Toplevel):
     def __init__(self, parent, text):
         super().__init__(parent)
-        self.title("Help")
+        self.title("Hilfe")
         self.geometry("600x400")
         t = tk.Text(self, wrap=tk.WORD, padx=10, pady=10, font=("Consolas", 10))
         t.pack(fill=tk.BOTH, expand=True)
